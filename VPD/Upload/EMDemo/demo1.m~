@@ -1,0 +1,79 @@
+load ../YorkUrbanDB/Manhattan_Image_DB_Names.mat
+Kosecka_VPErr = zeros(102,21);
+Kosecka_Foc = zeros(102,1);
+Kosecka_Time = zeros(102,1);
+
+foc0 = 675;
+pp0 = [307.55;251.45];
+for i = 9
+    i
+    f = imread(['../YorkUrbanDB/' Manhattan_Image_DB_Names{i}(1:end-1) '/' Manhattan_Image_DB_Names{i}(1:end-1) '.jpg']);
+    load(['../YorkUrbanDB/' Manhattan_Image_DB_Names{i}(1:end-1) '/' Manhattan_Image_DB_Names{i}(1:end-1) 'LinesAndVP.mat']);
+    load(['../YorkUrbanDB/' Manhattan_Image_DB_Names{i}(1:end-1) '/' Manhattan_Image_DB_Names{i}(1:end-1) 'GroundTruthVP_Orthogonal_CamParams.mat']);
+    ix = 1:floor(length(lines)/2);
+    line = zeros(length(ix),6); 
+    line(ix,1) = lines(2*ix-1,2);
+    line(ix,2) = lines(2*ix,2);
+    line(ix,3) = lines(2*ix-1,1);
+    line(ix,4) = lines(2*ix,1);
+    line(ix,5) = atan2(line(ix,4)-line(ix,3),line(ix,2) - line(ix,1))-pi/2;
+    line(ix,6) = line(ix,1).*cos(line(ix,5)) + line(ix,3).*sin(line(ix,5));
+    tic
+    [v2, sigma, p, hpos] = getVp(line, size(f),0);
+    vp = v2 - repmat([320 240],)
+    time = toc
+        
+    % Trans vp_orthogonal
+    vp_orthogonal = vp_orthogonal';
+    vp_orthogonal(:,2) = -vp_orthogonal(:,2);
+    vp_orthogonal = vp_orthogonal ./ repmat(sign(vp_orthogonal(:,3)),1,3);
+    
+    % Calculate vp0 - the 2D h-coordinates on image
+    vp0 = vp;
+    
+    % Calculate vp1 - the coordinates of 3D VP direction calculated using
+    % foc0 and pp0
+    vp1 = [vp(:,1:2) + ...
+        [vp(:,3) vp(:,3)].* ...
+        - repmat(pp0' - [320 240],size(vp,1),1) ...
+        vp(:,3).*foc0];
+    vp1 = vp1./repmat(sqrt(sum(vp1.^2,2)),1,3);
+    % Find the most approximated vp1
+    mindex = [0 0 0];
+    mangle = [inf inf inf];
+    for j = 1:3
+        for k = 1:size(vp1,1)
+            if acos(abs(vp_orthogonal(j,:)*vp1(k,:)')) < mangle(j)
+                mindex(j) = k;
+                mangle(j) = acos(abs(vp_orthogonal(j,:)*vp1(k,:)'));
+            end
+        end
+    end
+    vp1 = vp1(mindex,:);
+    vp0 = vp0(mindex,:);
+    % Adjust vp_orthogonal's sign
+    threshold = 20*pi/180;
+    for j = 1:3
+        if vp_orthogonal(j,:)*vp1(j,:)' < 0 & mangle(j) < threshold
+            vp_orthogonal(j,1:2) = -vp_orthogonal(j,1:2);
+        end
+    end
+        
+    Kosecka_VPErr(i,:) = [vp_orthogonal(1,:) vp_orthogonal(2,:) vp_orthogonal(3,:) vp1(1,:) vp1(2,:) vp1(3,:) mangle];
+    Kosecka_Time(i) = time;
+    draw(f,vp0,vp_orthogonal,line);
+    threshold = 20*pi/180;
+    if sum(mangle < threshold) == 3
+        pp = [vp0(3,1) - vp0(1,1), vp0(3,2) - vp0(1,2); vp0(1,1) - vp0(2,1), vp0(1,2) - vp0(2,2)]\...
+            [vp0(2,1)*(vp0(3,1) - vp0(1,1)) + vp0(2,2)*(vp0(3,2) - vp0(1,2)); ...
+            vp0(3,1)*(vp0(1,1) - vp0(2,1)) + vp0(3,2)*(vp0(1,2) - vp0(2,2))];
+        
+        vp0(:,1:2) = vp0(:,1:2) - [pp';pp';pp'];
+        if isreal(-vp0(1,:)*vp0(2,:)') & -vp0(1,:)*vp0(2,:)' > 0 
+            Kosecka_Foc(i) = sqrt(-vp0(1,:)*vp0(2,:)');
+        end
+    end
+end
+
+
+save('Kosecka_ExYB.mat','Kosecka_VPErr','Kosecka_Foc','Kosecka_Time');
