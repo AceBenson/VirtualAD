@@ -12,7 +12,7 @@ depthMax = 1000
 def read_file(fname):
 	if fname.endswith('.npy'):
 		return np.load(fname)
-	elif fname.endswith('.jpg'):
+	elif fname.endswith('.jpg') or fname.endswith('.jpeg'):
 		img = plt.imread(fname)
 		img = img.astype(np.float32) / 255.0
 		# try:
@@ -147,7 +147,7 @@ def main(args):
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='point clouds rendering')
-	parser.add_argument('-c', "--image", type=str, default='')
-	parser.add_argument('-d', "--depth", type=str, default='')
+	parser.add_argument('-c', "--image", type=str, default='./Images/test.jpeg')
+	parser.add_argument('-d', "--depth", type=str, default='./Images/test_depth.png')
 	args = parser.parse_args()
 	main(args)

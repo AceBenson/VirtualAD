@@ -10,7 +10,7 @@ from skimage import io
 from skimage.transform import resize
 
 
-img_path = 'wikicommons_field.jpg'
+img_path = '../Images/test.jpeg'
 
 model = create_model(opt)
 
