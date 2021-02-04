@@ -1,31 +1,34 @@
-
 import cv2
 import numpy as np
 import numba
-from oct2py import octave
-import open3d as o3d
+import torch
 
+from oct2py import octave
+
+
+# download this pkg
+octave.eval('pkg install "./image-2.10.0.tar.gz"')
 octave.addpath('./matlab_modules/')
 octave.eval('pkg load image')
 
-# MegaDepth output
-depth_image = cv2.imread('../Images/wikicommons_field_inv_depth.png', cv2.IMREAD_GRAYSCALE)
+# MegaDepth net output
+
+megadepth_prediction = 'pred_depth.pt'
+depth_image = torch.load(megadepth_prediction).detach().cpu().numpy()
 
 H, W = depth_image.shape
 
-# mask = cv2.imread('mask0.png', 0)
-# mask = cv2.resize(mask, (W, H), cv2.INTER_AREA)
+mask = cv2.imread('mask0.png', 0)
+mask = cv2.resize(mask, (W, H), cv2.INTER_AREA)
 
-im = cv2.imread('../Images/wikicommons_field.jpg')
+im = cv2.imread('demo.jpg')
 im = cv2.resize(im, (W, H), cv2.INTER_AREA)
 rgb = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
 
 focal = octave.findFocal(rgb)
 print(f"focal {focal}")
-# focal = octave.demo_final(im)
-# print(f"focal {focal}")
 
-# @numba.jit
+@numba.jit
 def create_point_cloud(depth_image, f, scale):
     shape = depth_image.shape;
     rows = shape[0];
@@ -64,17 +67,4 @@ def create_point_cloud(depth_image, f, scale):
 
 
 
-points_cloud = create_point_cloud(depth_image,  f=focal, scale=1000)
-print(points_cloud.shape)
-
-pcd = o3d.geometry.PointCloud()
-r = rgb[:, :, 0].flatten()
-g = rgb[:, :, 1].flatten()
-b = rgb[:, :, 2].flatten()
-myc = np.stack([r, g, b], axis=1)
-pcd.points = o3d.utility.Vector3dVector(points_cloud)
-# pcd.colors = o3d.utility.Vector3dVector(myc)
-# o3d.io.write_point_cloud("./sync.ply", pcd)
-
-# pcd_load = o3d.io.read_point_cloud("./sync.ply")
-o3d.visualization.draw_geometries([pcd])
+points_cloud = create_point_cloud(depth_image * (mask > 0) * 1,  f=focal, scale=1000)
