@@ -1,11 +1,8 @@
-import open3d as o3d
-import os 
 import numpy as np
-import matplotlib.pyplot as plt
 import argparse
-import cv2
+import matplotlib.pyplot as plt
 from PIL import Image
-from pprint import pprint
+import open3d as o3d
 
 def read_file(fname):
 	if fname.endswith('.npy'):
