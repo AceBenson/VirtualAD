@@ -77,7 +77,7 @@ def main(args):
     # Get mask from PSPNet Result
     index0 = mask[:, :, 0] == 31/255
     index1 = mask[:, :, 1] == 255/255
-    index2 = mask[:, :, 1] == 0/255
+    index2 = mask[:, :, 2] == 0/255
     index = np.logical_and(index0, index1, index2)
 
     # Create points from depth by pinhole model
@@ -107,9 +107,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image", type=str, default='./Images/wikicommons_field.jpg')
-    parser.add_argument("--depth", type=str, default='./Images/wikicommons_field_inv_depth.png')
-    parser.add_argument("--mask", type=str, default='./Images/pred_wikicommons_field.png')
-    parser.add_argument("--focal", type=float, default=580.8723715937349)
+    parser.add_argument("--image", type=str, default='./Images/test_resized.jpeg')
+    parser.add_argument("--depth", type=str, default='./Images/test_depth.png')
+    parser.add_argument("--mask", type=str, default='./Images/pred_test_resized.png')
+    parser.add_argument("--focal", type=float, default=1324.0)
     args = parser.parse_args()
     main(args)
