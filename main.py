@@ -38,19 +38,18 @@ def create_point_cloud(depth_image, f, scale, index):
             i = i + 1
     return points
 
-def find_plane(pcd):
-	plane_model, inliers = pcd.segment_plane(distance_threshold=5,
+def find_crowd_plane(pcd):
+	plane_model, inliers = pcd.segment_plane(distance_threshold=10,
 											 ransac_n=3,
 											 num_iterations=1000)
 	[a, b, c, d] = plane_model
-	print(f'Crowd Plane equation: {a:.2f}x + {b:.2f}y + {c:.2f}z + {d:.2f} = 0')
 
 	inlier_clouds = pcd.select_by_index(inliers)
 	inlier_clouds.paint_uniform_color([1.0, 0.0, 0.0])
 	outlier_clouds = pcd.select_by_index(inliers, invert=True)
 	return [inlier_clouds, outlier_clouds], [a, b, c, d]
 
-def find_alignment(depth_image, f, scale, index):
+def find_alignment_plane(depth_image, f, scale, index):
     shape = depth_image.shape
     rows = shape[0]
     cols = shape[1]
@@ -88,19 +87,20 @@ def find_alignment(depth_image, f, scale, index):
     cp = np.cross(v1, v2)
     a, b, c = cp
     d = -np.dot(cp, p3)
-    print(f'Alignment Plane equation: {a:.2f}x + {b:.2f}y + {c:.2f}z + {d:.2f} = 0')
-    
-    # Sample points
+    return [a, b, c, d]
+
+def getPointsFromEquation(x1, y1, x2, y2, model):
+    a, b, c, d = model
     points_cloud = np.zeros((100*100, 3), np.float32)
     i = 0
-    for x in np.linspace(p2[0], p3[0], 100):
-        for y in np.linspace(p2[1], p3[1], 100):
+    for x in np.linspace(x1, x2, 100):
+        for y in np.linspace(y1, y2, 100):
             z = -((d + a*x + b*y) / c)
             points_cloud[i, 0] = x
             points_cloud[i, 1] = y
             points_cloud[i, 2] = z
             i = i + 1
-    return points_cloud, [a, b, c, d]
+    return points_cloud
 
 def reference_axis():
     points_cloud_reference = np.zeros((100*3, 3), np.float32)
@@ -154,7 +154,8 @@ def plane_intersect(a, b):
     # could add np.linalg.det(A) == 0 test to prevent linalg.solve throwing error
     p_inter = np.linalg.solve(A, d).T
 
-    return p_inter[0], (p_inter + aXb_vec)[0]
+    return p_inter[0], (p_inter - aXb_vec)[0]
+
 
 def main(args):
     # Read files
@@ -190,22 +191,9 @@ def main(args):
 
     # Reference points
     x_pcd, y_pcd, z_pcd = reference_axis()
-    
-    # Find alignment line
-    alignment_plane_points, alignment_plane_model = find_alignment(depth_image=depth, f=focal, scale=1000, index=index)
-    alignment_pcd = o3d.geometry.PointCloud()
-    alignment_pcd.points = o3d.utility.Vector3dVector(alignment_plane_points)
-    alignment_pcd.paint_uniform_color([0.0, 0.0, 1.0])
-    alignment_pcd.transform([
-        [1, 0, 0, 0],
-        [0,-1, 0, 0],
-        [0, 0,-1, 0],
-        [0, 0, 0, 1]
-        ]) # flip, otherwise the pcd will be upside down
-    o3d.visualization.draw_geometries([alignment_pcd, x_pcd, y_pcd, z_pcd])
 
     # Create points from depth by pinhole model
-    points = create_point_cloud(depth_image=depth, f=focal, scale=1000, index=index)
+    points_cloud = create_point_cloud(depth_image=depth, f=focal, scale=1000, index=index)
     # Set point cloud color
     r = rgb[index][:, 0].flatten()
     g = rgb[index][:, 1].flatten()
@@ -213,7 +201,7 @@ def main(args):
     myc = np.stack([r, g, b], axis=1)
     # PointCloud 
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.points = o3d.utility.Vector3dVector(points_cloud)
     pcd.colors = o3d.utility.Vector3dVector(myc)
     pcd.transform([
         [1, 0, 0, 0],
@@ -221,12 +209,49 @@ def main(args):
         [0, 0,-1, 0],
         [0, 0, 0, 1]
         ]) # flip, otherwise the pcd will be upside down
-    o3d.visualization.draw_geometries([pcd, alignment_pcd, x_pcd, y_pcd, z_pcd])
 
-    # Fit Plane
-    [inlier_clouds, outlier_clouds], crowd_plane_model = find_plane(pcd)
-    o3d.visualization.draw_geometries([inlier_clouds, outlier_clouds])
-            
+    # Find Alignment Plane
+    alignment_plane_model = find_alignment_plane(depth_image=depth, f=focal, scale=1000, index=index)
+
+    # Find Crowd Plane
+    [inlier_clouds, outlier_clouds], crowd_plane_model = find_crowd_plane(pcd)
+    a, b, c, d = crowd_plane_model
+    crowd_plane_model = [a, -b, -c, d]
+
+    points_cloud = getPointsFromEquation(0, 299, 1000, 300.2, alignment_plane_model)
+    a_pcd = o3d.geometry.PointCloud()
+    a_pcd.points = o3d.utility.Vector3dVector(points_cloud)
+    a_pcd.paint_uniform_color([0.0, 1.0, 0.0])
+    a_pcd.transform([
+        [1, 0, 0, 0],
+        [0,-1, 0, 0],
+        [0, 0,-1, 0],
+        [0, 0, 0, 1]
+        ]) # flip, otherwise the pcd will be upside down
+    points_cloud = getPointsFromEquation(0, 0, 1000, 500, crowd_plane_model)
+    c_pcd = o3d.geometry.PointCloud()
+    c_pcd.points = o3d.utility.Vector3dVector(points_cloud)
+    c_pcd.paint_uniform_color([1.0, 0.0, 0.0])
+    c_pcd.transform([
+        [1, 0, 0, 0],
+        [0,-1, 0, 0],
+        [0, 0,-1, 0],
+        [0, 0, 0, 1]
+        ]) # flip, otherwise the pcd will be upside down
+    
+    # Vector v
+    p1, p2 = plane_intersect(alignment_plane_model, crowd_plane_model)
+    points_cloud = zip(np.linspace(p1[0], p2[0], 100), np.linspace(p1[1], p2[1], 100), np.linspace(p1[2], p2[2], 100))
+    v_pcd = o3d.geometry.PointCloud()
+    v_pcd.points = o3d.utility.Vector3dVector(points_cloud)
+    v_pcd.paint_uniform_color([0.0, 0.0, 1.0])
+    v_pcd.transform([
+        [1, 0, 0, 0],
+        [0,-1, 0, 0],
+        [0, 0,-1, 0],
+        [0, 0, 0, 1]
+        ]) # flip, otherwise the pcd will be upside down
+    o3d.visualization.draw_geometries([pcd, v_pcd, a_pcd, c_pcd, x_pcd, y_pcd, z_pcd])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
