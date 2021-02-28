@@ -89,7 +89,7 @@ def find_alignment_plane(depth_image, f, scale, index):
     d = -np.dot(cp, p3)
     return [a, b, c, d]
 
-def getPointsFromEquation(x1, y1, x2, y2, model):
+def get_points_by_equation(x1, y1, x2, y2, model):
     a, b, c, d = model
     points_cloud = np.zeros((100*100, 3), np.float32)
     i = 0
@@ -156,12 +156,52 @@ def plane_intersect(a, b):
 
     return p_inter[0], (p_inter - aXb_vec)[0]
 
+def get_corners(p1, p2, n, inlier_clouds, outlier_clouds):
+
+    # TODO
+    # convex hull -> asset size
+    # u, v aspect ratio
+
+    hull, _ = inlier_clouds.compute_convex_hull()
+    hull_ls = o3d.geometry.LineSet.create_from_triangle_mesh(hull)
+    hull_ls.paint_uniform_color((0, 1, 0))
+    o3d.visualization.draw_geometries([inlier_clouds, outlier_clouds, hull_ls])
+
+    pCenter = (p1 + p2) / 2
+    p1 = (p1 + pCenter) / 2
+    p2 = (p1 + pCenter) / 2
+    v = p2-p1
+    u = np.cross(n, v)
+    p3 = p1 + u
+    p4 = p2 + u
+    return [p1, p2, p3, p4]
+
+def put_asset(p, rgb, ad, f):
+    h, w, _ = rgb.shape
+    cx = w / 2
+    cy = h / 2
+    pts_dst = np.zeros((4, 2))
+    for i in range(4):
+        c = (p[i][0] - cx) * f / p[i][2] + cx
+        r = (p[i][1] - cy) * f / p[i][2] + cy
+        pts_dst[i] = [c, r] # (x,y)
+
+    pts_src = np.array([ [0, ad.shape[0]-1], [ad.shape[1]-1, ad.shape[0]-1], [0, 0], [ad.shape[1]-1, 0] ])
+
+    M, status = cv2.findHomography(pts_src, pts_dst)
+    ad_homography = cv2.warpPerspective(ad, M, (w, h))
+
+    index = ad_homography[:, :, 0] != 0
+    rgb[index] = ad_homography[index]
+
+    return rgb
 
 def main(args):
     # Read files
     rgb = read_file(args.image)
     depth = read_file(args.depth)
     mask = read_file(args.mask)
+    ad = read_file(args.ad)
     focal = args.focal
 
     # Deal with depth input
@@ -218,7 +258,8 @@ def main(args):
     a, b, c, d = crowd_plane_model
     crowd_plane_model = [a, -b, -c, d]
 
-    points_cloud = getPointsFromEquation(0, 299, 1000, 300.2, alignment_plane_model)
+    # Add Alignment Plane & Crowd Plane pcd
+    points_cloud = get_points_by_equation(0, 299, 1000, 300.2, alignment_plane_model)
     a_pcd = o3d.geometry.PointCloud()
     a_pcd.points = o3d.utility.Vector3dVector(points_cloud)
     a_pcd.paint_uniform_color([0.0, 1.0, 0.0])
@@ -228,7 +269,7 @@ def main(args):
         [0, 0,-1, 0],
         [0, 0, 0, 1]
         ]) # flip, otherwise the pcd will be upside down
-    points_cloud = getPointsFromEquation(0, 0, 1000, 500, crowd_plane_model)
+    points_cloud = get_points_by_equation(0, 0, 1000, 500, crowd_plane_model)
     c_pcd = o3d.geometry.PointCloud()
     c_pcd.points = o3d.utility.Vector3dVector(points_cloud)
     c_pcd.paint_uniform_color([1.0, 0.0, 0.0])
@@ -241,7 +282,12 @@ def main(args):
     
     # Vector v
     p1, p2 = plane_intersect(alignment_plane_model, crowd_plane_model)
-    points_cloud = zip(np.linspace(p1[0], p2[0], 100), np.linspace(p1[1], p2[1], 100), np.linspace(p1[2], p2[2], 100))
+
+    # Find 4 points by convex hull and u, v
+    p = get_corners(p1, p2, crowd_plane_model[:-1], inlier_clouds, outlier_clouds)
+
+    # Add u, v pcd
+    points_cloud = zip(np.linspace(p[0][0], p[1][0], 100), np.linspace(p[0][1], p[1][1], 100), np.linspace(p[0][2], p[1][2], 100))
     v_pcd = o3d.geometry.PointCloud()
     v_pcd.points = o3d.utility.Vector3dVector(points_cloud)
     v_pcd.paint_uniform_color([0.0, 0.0, 1.0])
@@ -251,13 +297,33 @@ def main(args):
         [0, 0,-1, 0],
         [0, 0, 0, 1]
         ]) # flip, otherwise the pcd will be upside down
-    o3d.visualization.draw_geometries([pcd, v_pcd, a_pcd, c_pcd, x_pcd, y_pcd, z_pcd])
+    points_cloud = zip(np.linspace(p[0][0], p[2][0], 100), np.linspace(p[0][1], p[2][1], 100), np.linspace(p[0][2], p[2][2], 100))
+    u_pcd = o3d.geometry.PointCloud()
+    u_pcd.points = o3d.utility.Vector3dVector(points_cloud)
+    u_pcd.paint_uniform_color([0.0, 0.0, 1.0])
+    u_pcd.transform([
+        [1, 0, 0, 0],
+        [0,-1, 0, 0],
+        [0, 0,-1, 0],
+        [0, 0, 0, 1]
+        ]) # flip, otherwise the pcd will be upside down
+    o3d.visualization.draw_geometries([pcd, v_pcd, u_pcd, a_pcd, c_pcd, x_pcd, y_pcd, z_pcd])
+
+
+    result = put_asset(p, rgb, ad, focal)
+    
+    result = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+    cv2.imshow('result', result)
+    cv2.waitKey(0)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", type=str, default='./Images/test_resized.jpeg')
     parser.add_argument("--depth", type=str, default='./Images/test_depth.png')
     parser.add_argument("--mask", type=str, default='./Images/pred_test_resized.png')
+    parser.add_argument("--ad", type=str, default='./Images/AD3.jpg')
     parser.add_argument("--focal", type=float, default=1324.0)
     args = parser.parse_args()
     main(args)
