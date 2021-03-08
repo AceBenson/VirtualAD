@@ -10,7 +10,7 @@ from skimage import io
 from skimage.transform import resize
 
 
-img_path = '../Images/test.jpeg'
+img_path = '../Images/video16.png'
 
 model = create_model(opt)
 

@@ -22,7 +22,7 @@ def estimate_focal(rgb):
     return focal
 
 def main():
-    rgb = read_file('../Images/test_resized.jpeg')
+    rgb = read_file('../Images/video16.png')
     estimate_focal(rgb)
 
 if __name__ == '__main__':
