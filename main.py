@@ -152,8 +152,8 @@ def identifyAlignmentPlaneEquation(mask, depth_image, f, scale=1000):
     equation = deriveEquation(rows, cols, x, y)
     return equation
 
-def fitCrowdPlaneEquation(pcd):
-    plane_model, inliers = pcd.segment_plane(distance_threshold=10, ransac_n=3, num_iterations=1000)
+def fitCrowdPlaneEquation(pcd, th):
+    plane_model, inliers = pcd.segment_plane(distance_threshold=th, ransac_n=3, num_iterations=1000)
     [a, b, c, d] = plane_model
     inlier_clouds = pcd.select_by_index(inliers)
     outlier_clouds = pcd.select_by_index(inliers, invert=True)
@@ -313,7 +313,7 @@ def main(args):
     grandStandPCD = filterGrandStandPointsCloud(mainPCD, images.mask)
 
     alignmentPlaneEquation = identifyAlignmentPlaneEquation(images.mask, images.depth_image, focal)
-    crowdPlaneEquation = fitCrowdPlaneEquation(grandStandPCD)
+    crowdPlaneEquation = fitCrowdPlaneEquation(grandStandPCD, images.imageWidth/10)
 
     points = np.asarray(grandStandPCD.points)
     corners = findCorners(alignmentPlaneEquation, crowdPlaneEquation, np.max(points[:, 0]), np.min(points[:, 0]), \
