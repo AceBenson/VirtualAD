@@ -48,7 +48,7 @@ def visualize_result(data, pred, cfg):
     # im_vis = np.concatenate((img, pred_color), axis=1)
     im_vis = pred_color
 
-    img_name = 'pred_' + info.split('/')[-1]
+    img_name = 'pred_' + cfg.MODEL.arch_encoder + '_' + cfg.MODEL.arch_decoder + '_' + info.split('/')[-1]
     Image.fromarray(im_vis).save(
         os.path.join(cfg.TEST.result, img_name.replace('.jpeg', '.png').replace('jpg', 'png')))
 
