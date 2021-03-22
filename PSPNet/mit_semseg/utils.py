@@ -25,7 +25,11 @@ def setup_logger(distributed_rank=0, filename="log.txt"):
 def find_recursive(root_dir, ext='.jpg'):
     files = []
     for root, dirnames, filenames in os.walk(root_dir):
-        for filename in fnmatch.filter(filenames, '*' + ext):
+        for filename in fnmatch.filter(filenames, '*' + '.jpg'):
+            files.append(os.path.join(root, filename))
+        for filename in fnmatch.filter(filenames, '*' + '.jpeg'):
+            files.append(os.path.join(root, filename))
+        for filename in fnmatch.filter(filenames, '*' + '.png'):
             files.append(os.path.join(root, filename))
     return files
 
